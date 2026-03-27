@@ -11,3 +11,5 @@ checkpoints/
 *.pth
 *.pt
 runs/
+data/raw/
+venv/
