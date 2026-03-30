@@ -14,6 +14,17 @@ vit-group16/
 │   ├── vit.py              # Xu Yixiao   — ViT encoder (MSA + MLP blocks)
 │   ├── cnn.py              # Xu Yixiao   — ResNet-18 CNN baseline
 │   └── __init__.py
+├── configs/
+│   ├── finetune_config.py      # Zhang Tianyue — training / model config
+│   └── __init__.py
+├── utils/
+│   ├── seed.py                # Zhang Tianyue — random seed setup
+│   ├── checkpoint.py          # Zhang Tianyue — save / load checkpoints
+│   └── __init__.py
+├── checkpoints/               # Saved model checkpoints and training history
+│   ├── best_model.pth
+│   ├── history.json
+│   └── history.csv
 ├── train.py                # Zhang Tianyue — fine-tune pipeline
 ├── evaluate.py             # Duan Tianyu   — evaluation metrics
 ├── experiments/            # Lin / Wang    — extension experiment configs
@@ -47,6 +58,13 @@ CIFAR10 loaded | train=50000 test=10000 | img_size=224 batch=64 classes=10
 ```bash
 python models/patch_embedding.py
 ```
+
+## Quick test - Fine tuning
+
+Run fine-tuning with:
+
+```bash
+python train.py
 
 Expected output:
 ```
