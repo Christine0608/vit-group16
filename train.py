@@ -13,6 +13,7 @@ from configs.finetune_config import CONFIG
 from utils.seed import set_seed
 from utils.checkpoint import save_checkpoint
 from models.ResNet_CNN import resnet18
+from models.vit import ViT
 
 
 def train_one_epoch(model, loader, criterion, optimizer, device):
@@ -113,10 +114,19 @@ def main():
         experiment_name = "vit_pretrained"
 
     elif model_name == "vit_scratch":
-        model = timm.create_model(
-            "vit_tiny_patch16_224",
-            pretrained=False,
-            num_classes=num_classes
+        model = ViT(
+            img_size=cfg["img_size"],
+            patch_size=16,
+            in_channels=3,
+            num_classes=num_classes,
+            hidden_size=192,
+            num_layers=4,
+            mlp_dim=768,
+            num_heads=3,
+            dropout_rate=0.1,
+            attention_dropout_rate=0.1,
+            representation_size=None,
+            classifier="token",
         )
         experiment_name = "vit_scratch"
 

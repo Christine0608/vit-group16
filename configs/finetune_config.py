@@ -4,14 +4,14 @@ CONFIG = {
     "batch_size": 32,
     "img_size": 224,
     "num_workers": 2,
-    "data_fraction": 0.1,   # debug用0.1，正式实验可改成1.0
+    "data_fraction": 1.0,
 
     # ===== Experiment =====
     # options: "cnn", "vit_pretrained", "vit_scratch"
     "model_name": "vit_scratch",
 
     # ===== Training =====
-    "epochs": 5,
+    "epochs": 10,
     "lr": 1e-4,
     "weight_decay": 1e-4,
 
