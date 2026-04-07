@@ -1,26 +1,20 @@
-# configs/finetune_config.py
-
 CONFIG = {
     # ===== Data =====
-    "dataset_name": "cifar10",     # choose from: "cifar10", "cifar100"
+    "dataset_name": "cifar10",
     "batch_size": 32,
     "img_size": 224,
     "num_workers": 2,
-    "data_fraction": 1.0,          # use 1.0 for full data, 0.1 / 0.3 for low-data experiments
+    "data_fraction": 0.1,   # debug用0.1，正式实验可改成1.0
 
-    # ===== Model =====
-    "model_name": "vit_tiny_patch16_224",
-    "pretrained": True,
+    # ===== Experiment =====
+    # options: "cnn", "vit_pretrained", "vit_scratch"
+    "model_name": "vit_scratch",
 
     # ===== Training =====
-    "epochs": 3,
+    "epochs": 5,
     "lr": 1e-4,
     "weight_decay": 1e-4,
 
     # ===== System =====
-    "device": "cuda",
     "seed": 42,
-
-    # ===== Saving =====
-    "save_dir": "./checkpoints",
 }
