@@ -1,4 +1,3 @@
-# train.py
 import os
 import json
 import csv
@@ -13,6 +12,9 @@ from data.dataset import get_dataloaders
 from configs.finetune_config import CONFIG
 from utils.seed import set_seed
 from utils.checkpoint import save_checkpoint
+from models.ResNet_CNN import resnet18
+from models.vit import ViT
+
 
 def train_one_epoch(model, loader, criterion, optimizer, device):
     model.train()
@@ -49,6 +51,7 @@ def train_one_epoch(model, loader, criterion, optimizer, device):
 
     return epoch_loss, epoch_acc
 
+
 @torch.no_grad()
 def evaluate(model, loader, criterion, device):
     model.eval()
@@ -76,6 +79,7 @@ def evaluate(model, loader, criterion, device):
 
     return epoch_loss, epoch_acc
 
+
 def main():
     cfg = CONFIG
     set_seed(cfg["seed"])
@@ -99,19 +103,53 @@ def main():
     )
 
     # 2. Build model
-    model = timm.create_model(
-        cfg["model_name"],
-        pretrained=cfg["pretrained"]
-    )
+    model_name = cfg["model_name"]
 
-    in_features = model.head.in_features
-    model.head = nn.Linear(in_features, num_classes)
+    if model_name == "vit_pretrained":
+        model = timm.create_model(
+            "vit_tiny_patch16_224",
+            pretrained=True,
+            num_classes=num_classes
+        )
+        experiment_name = "vit_pretrained"
+
+    elif model_name == "vit_scratch":
+        model = ViT(
+            img_size=cfg["img_size"],
+            patch_size=16,
+            in_channels=3,
+            num_classes=num_classes,
+            hidden_size=192,
+            num_layers=4,
+            mlp_dim=768,
+            num_heads=3,
+            dropout_rate=0.1,
+            attention_dropout_rate=0.1,
+            representation_size=None,
+            classifier="token",
+        )
+        experiment_name = "vit_scratch"
+
+    elif model_name == "cnn":
+        model = resnet18(num_classes=num_classes)
+        experiment_name = "cnn_resnet18"
+
+    else:
+        raise ValueError(f"Unsupported model_name: {model_name}")
+
     model = model.to(device)
 
-    print(f"[model] loaded: {cfg['model_name']}")
-    print(f"[model] head changed to {num_classes} classes")
+    # 3. Create save dir
+    save_dir = os.path.join("outputs", experiment_name)
+    os.makedirs(save_dir, exist_ok=True)
 
-    # 3. Loss and optimizer
+    # 4. Save config.json
+    config_path = os.path.join(save_dir, "config.json")
+    with open(config_path, "w") as f:
+        json.dump(cfg, f, indent=4)
+    print(f"[config] saved config to {config_path}")
+
+    # 5. Loss and optimizer
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.AdamW(
         model.parameters(),
@@ -128,7 +166,7 @@ def main():
         "val_acc": []
     }
 
-    # 4. Training loop
+    # 6. Training loop
     for epoch in range(cfg["epochs"]):
         print(f"\nEpoch [{epoch + 1}/{cfg['epochs']}]")
 
@@ -158,22 +196,18 @@ def main():
                     "best_acc": best_acc,
                     "config": cfg,
                 },
-                save_dir=cfg["save_dir"],
+                save_dir=save_dir,
                 filename="best_model.pth"
             )
 
-        # Save history
-    os.makedirs(cfg["save_dir"], exist_ok=True)
-
-    # Save JSON
-    json_path = os.path.join(cfg["save_dir"], "history.json")
+    # 7. Save history.json
+    json_path = os.path.join(save_dir, "history.json")
     with open(json_path, "w") as f:
         json.dump(history, f, indent=4)
-
     print(f"[history] saved json to {json_path}")
 
-    # Save CSV
-    csv_path = os.path.join(cfg["save_dir"], "history.csv")
+    # 8. Save history.csv
+    csv_path = os.path.join(save_dir, "history.csv")
     with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["epoch", "train_loss", "train_acc", "val_loss", "val_acc"])
@@ -186,10 +220,10 @@ def main():
                 history["val_loss"][i],
                 history["val_acc"][i],
             ])
-
     print(f"[history] saved csv to {csv_path}")
-    
+
     print(f"\n[done] best val acc = {best_acc:.4f}")
+
 
 if __name__ == "__main__":
     main()

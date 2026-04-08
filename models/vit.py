@@ -8,7 +8,7 @@ Desc:   MSA(multi-head self-attention) + MLP Block + Encoder(with LayerNorm) for
 import torch
 import torch.nn as nn
 
-from patch_embedding import PatchEmbedding
+from models.patch_embedding import PatchEmbedding
 
 class IdentityLayer(nn.Module):
     def forward(self, x):

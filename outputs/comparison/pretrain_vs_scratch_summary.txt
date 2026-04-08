@@ -1,0 +1,11 @@
+Pretrained vs Scratch Comparison
+========================================
+
+Pretrained best val acc : 0.9579
+Scratch best val acc    : 0.5987
+
+Pretrained final val acc  : 0.9535
+Scratch final val acc     : 0.5987
+
+Pretrained final val loss : 0.1554
+Scratch final val loss    : 1.1245
