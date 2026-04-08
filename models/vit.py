@@ -232,6 +232,7 @@ class ViT(nn.Module):
             representation_size: int = None,
             classifier: str = "token",   # "token" or "gap"
             head_bias_init: float = 0.0,
+            pos_encoding_type: str = 'learnable',
         ):
             super().__init__()
 
@@ -249,6 +250,7 @@ class ViT(nn.Module):
                 in_channels=in_channels,
                 embed_dim=hidden_size,
                 dropout=dropout_rate,
+                pos_encoding_type=pos_encoding_type,
             )
 
             self.encoder = Encoder(
