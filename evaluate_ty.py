@@ -1,15 +1,12 @@
 import os
+import json
 import torch
 import torch.nn as nn
 import numpy as np
 from tqdm import tqdm
-from sklearn.metrics import (
-    accuracy_score,
-    precision_score,
-    recall_score,
-    f1_score,
-)
+from sklearn.metrics import precision_score, recall_score, f1_score
 
+# Pipeline Imports
 from data.dataset import get_dataloaders
 from configs.finetune_config import CONFIG
 from models.ResNet_CNN import resnet18
@@ -24,11 +21,7 @@ def accuracy_topk(output, target, topk=(1, 5)):
         _, pred = output.topk(maxk, 1, True, True)
         pred = pred.t()
         correct = pred.eq(target.view(1, -1).expand_as(pred))
-        res = []
-        for k in topk:
-            correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True)
-            res.append(correct_k.mul_(100.0 / batch_size).item())
-        return res
+        return [correct[:k].reshape(-1).float().sum(0).mul_(100.0 / batch_size).item() for k in topk]
 
 def interpolate_pos_embed(pos_embed, new_size, patch_size=16):
     """Bicubic 2D interpolation for positional embeddings (Paper Section 3.2)."""
@@ -47,7 +40,7 @@ def interpolate_pos_embed(pos_embed, new_size, patch_size=16):
     return torch.cat((cls_token_embed, patch_embeds), dim=1)
 
 def build_model(model_name, num_classes, img_size):
-    """Path and model logic copied directly from provided evaluate.py."""
+    """Initializes architecture based on the project's build logic."""
     if model_name == "cnn":
         model = resnet18(num_classes=num_classes)
         experiment_name = "cnn_resnet18"
@@ -67,80 +60,92 @@ def build_model(model_name, num_classes, img_size):
         raise ValueError(f"Unsupported model_name: {model_name}")
     return model, experiment_name
 
-def evaluate_run(checkpoint_path, model, test_loader, device, img_size):
-    """Evaluates a single model run to collect metrics."""
-    print(f"[load] checkpoint from {checkpoint_path}")
-    checkpoint = torch.load(checkpoint_path, map_location=device)
-    model.load_state_dict(checkpoint["model_state_dict"])
+def main():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model_name = CONFIG["model_name"]
+    img_size = CONFIG["img_size"]
+
+    # 1. Determine Path based on build_model logic
+    _, experiment_name = build_model(model_name, 10, img_size)
+    save_dir = os.path.join("outputs", experiment_name)
+    checkpoint_path = os.path.join(save_dir, "best_model.pth")
+
+    if not os.path.exists(checkpoint_path):
+        print(f"[error] No checkpoint found at {checkpoint_path}")
+        return
+
+    # 2. Extract Metadata from Checkpoint
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    state_dict = checkpoint["model_state_dict"]
+    
+    # Extract the training config
+    train_cfg = checkpoint.get("config", CONFIG)
+    dataset_name = train_cfg.get("dataset_name", CONFIG.get("dataset_name"))
+    
+    # FIX: Dynamically detect num_classes by checking layer names
+    if "head.weight" in state_dict:
+        num_classes = state_dict["head.weight"].shape[0]
+    elif "fc.weight" in state_dict:
+        num_classes = state_dict["fc.weight"].shape[0]
+    else:
+        # Fallback to config if layer names don't match standard patterns
+        num_classes = train_cfg.get("num_classes", 100)
+
+    print(f"[info] Loading context: {dataset_name} | {num_classes} classes")
+
+    # 3. Setup Data & Model using detected metadata
+    _, test_loader, _ = get_dataloaders(
+        dataset_name=dataset_name, 
+        batch_size=CONFIG["batch_size"], 
+        img_size=img_size
+    )
+
+    model, _ = build_model(model_name, num_classes, img_size)
+    model.load_state_dict(state_dict)
     model.to(device)
     model.eval()
 
+    # Handle resolution changes via interpolation if necessary
     if hasattr(model, 'pos_embed') and img_size != 224:
         model.pos_embed = nn.Parameter(interpolate_pos_embed(model.pos_embed, img_size))
 
+    # 4. Evaluation Loop
     all_labels, all_preds = [], []
     top1_accs, top5_accs = [], []
 
     with torch.no_grad():
-        for images, labels in tqdm(test_loader, leave=False):
+        for images, labels in tqdm(test_loader, desc="Evaluating"):
             images, labels = images.to(device), labels.to(device)
             outputs = model(images)
-            t1, t5 = accuracy_topk(outputs, labels, topk=(1, 5))
+            
+            t1, t5 = accuracy_topk(outputs, labels)
             top1_accs.append(t1)
             top5_accs.append(t5)
-            _, preds = torch.max(outputs, 1)
+            
             all_labels.extend(labels.cpu().numpy())
-            all_preds.extend(preds.cpu().numpy())
+            all_preds.extend(outputs.argmax(dim=1).cpu().numpy())
 
-    return {
-        "top1": np.mean(top1_accs),
-        "top5": np.mean(top5_accs),
-        "precision": precision_score(all_labels, all_preds, average="macro", zero_division=0),
-        "recall": recall_score(all_labels, all_preds, average="macro", zero_division=0),
-        "f1": f1_score(all_labels, all_preds, average="macro", zero_division=0)
+    # 5. Aggregate Final Metrics
+    results = {
+        "top1_accuracy": float(np.mean(top1_accs)),
+        "top5_accuracy": float(np.mean(top5_accs)),
+        "precision_macro": float(precision_score(all_labels, all_preds, average="macro", zero_division=0)),
+        "recall_macro": float(recall_score(all_labels, all_preds, average="macro", zero_division=0)),
+        "f1_macro": float(f1_score(all_labels, all_preds, average="macro", zero_division=0)),
+        "dataset_evaluated": dataset_name,
+        "num_classes": int(num_classes)
     }
 
-def main():
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    cfg = CONFIG
-    model_name = cfg["model_name"]
-    img_size = cfg["img_size"]
-
-    _, test_loader, num_classes = get_dataloaders(
-        dataset_name='cifar100', batch_size=cfg["batch_size"], img_size=img_size
-    )
-
-    temp_model, experiment_name = build_model(model_name, num_classes, img_size)
-    base_dir = os.path.join("outputs", experiment_name)
-    runs = ["run1", "run2", "run3"]
-    run_metrics = []
-
-    for run in runs:
-        checkpoint_path = os.path.join(base_dir, run, "best_model.pth")
-        if os.path.exists(checkpoint_path):
-            model, _ = build_model(model_name, num_classes, img_size)
-            metrics = evaluate_run(checkpoint_path, model, test_loader, device, img_size)
-            run_metrics.append(metrics)
-        else:
-            print(f"[warning] missing checkpoint: {checkpoint_path}")
-
-    if not run_metrics:
-        print("[error] no checkpoints found to evaluate.")
-        return
-
-    # Aggregate results for reporting Mean and SD
-    final_results = {}
-    metric_keys = ["top1", "top5", "precision", "recall", "f1"]
-    
-    for key in metric_keys:
-        values = [m[key] for m in run_metrics]
-        final_results[f"{key}_mean"] = np.mean(values)
-        final_results[f"{key}_std"] = np.std(values)
-
+    # 6. Save to evaluation.json and Print
     print("\n===== Evaluation Result =====")
-    print(f"runs_evaluated: {len(run_metrics)}")
-    for k, v in final_results.items():
-        print(f"{k}: {v:.4f}")
+    for k, v in results.items():
+        print(f"{k}: {v:.4f}" if isinstance(v, float) else f"{k}: {v}")
+
+    json_path = os.path.join(save_dir, "evaluation.json")
+    with open(json_path, "w") as f:
+        json.dump(results, f, indent=4)
+    
+    print(f"\n[metrics] saved to {json_path}")
 
 if __name__ == "__main__":
     main()

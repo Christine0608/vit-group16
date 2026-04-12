@@ -1,0 +1,9 @@
+{
+    "top1_accuracy": 93.91972843450479,
+    "top5_accuracy": 99.89017571884985,
+    "precision_macro": 0.9403951145801599,
+    "recall_macro": 0.9391999999999999,
+    "f1_macro": 0.9393580943598886,
+    "dataset_evaluated": "cifar10",
+    "num_classes": 10
+}
